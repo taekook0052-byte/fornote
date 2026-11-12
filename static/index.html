@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>ForNote — یادداشت از کتاب</title>
+<style>
+  body{font-family:Tahoma,sans-serif;max-width:900px;margin:2rem auto;padding:0 1rem;
+       background:#0f172a;color:#e2e8f0;line-height:1.8}
+  h1{color:#7dd3fc}
+  input,button,select{padding:.6rem;border-radius:.5rem;border:1px solid #334155;
+       background:#1e293b;color:#e2e8f0;margin:.3rem}
+  button{cursor:pointer;background:#0369a1;border:none}
+  button:hover{background:#0284c7}
+  #chapters{max-height:300px;overflow:auto}
+  li{cursor:pointer;color:#7dd3fc}
+  pre{white-space:pre-wrap;background:#1e293b;padding:1rem;border-radius:.5rem}
+  .muted{color:#94a3b8;font-size:.85rem}
+</style>
+</head>
+<body>
+<h1>📚 ForNote — یادداشت‌ساز هوشمند از کتاب</h1>
+<p class="muted">کتاب سنگین پزشکی (PDF) را آپلود کنید، فصل به فصل یادداشت بگیرید و در متن کتاب جست‌وجو کنید.</p>
+
+<h3>۱) آپلود کتاب</h3>
+<input type="file" id="file" accept=".pdf">
+<button onclick="upload()">آپلود</button>
+<span id="bookinfo" class="muted"></span>
+
+<h3>۲) فصل‌ها</h3>
+<ol id="chapters"></ol>
+
+<h3>۳) یادداشت‌ها</h3>
+<select id="lang"><option>فارسی</option><option>English</option></select>
+<button onclick="getNotes()">تولید یادداشت</button>
+<pre id="notes">—</pre>
+
+<h3>۴) پرسش از کتاب</h3>
+<input id="q" style="width:70%" placeholder="سؤال خود را بنویسید...">
+<button onclick="ask()">پرسیدن</button>
+<pre id="answer">—</pre>
+
+<script>
+const BID=localStorage.fornote_book;
+let CHAPTERS=[];
+async function upload(){
+  const f=document.getElementById('file').files[0]; if(!f)return;
+  const fd=new FormData(); fd.append('file',f);
+  document.getElementById('bookinfo').textContent='...در حال پردازش (کتاب‌های سنگین چند دقیقه طول می‌کشد)';
+  const r=await fetch('/upload',{method:'POST',body:fd});
+  const j=await r.json();
+  if(j.error){document.getElementById('bookinfo').textContent=j.error;return;}
+  localStorage.fornote_book=j.book_id;
+  loadBook(j);
+}
+function loadBook(j){
+  document.getElementById('bookinfo').textContent=`${j.title} — ${j.pages} صفحه، ${j.chapters.length} بخش`;
+  CHAPTERS=j.chapters;
+  document.getElementById('chapters').innerHTML=j.chapters.map(
+    c=>`<li onclick="pick(${c.index})">${c.title} <span class="muted">(صفحات ${c.pages})</span></li>`).join('');
+}
+function pick(i){sessionStorage.fornote_ch=i;document.getElementById('notes').textContent='...در حال تولید یادداشت';getNotes();}
+async function getNotes(){
+  const i=sessionStorage.fornote_ch; if(i===undefined)return;
+  const fd=new FormData(); fd.append('book_id',localStorage.fornote_book);
+  fd.append('chapter',i); fd.append('lang',document.getElementById('lang').value);
+  const r=await fetch('/notes',{method:'POST',body:fd}); const j=await r.json();
+  document.getElementById('notes').textContent=(j.mode==='gemini'?'✨ Gemini':'🔌 آفلاین')+'\n\n'+j.notes;
+}
+async function ask(){
+  const q=document.getElementById('q').value; if(!q)return;
+  const fd=new FormData(); fd.append('book_id',localStorage.fornote_book); fd.append('question',q);
+  document.getElementById('answer').textContent='...';
+  const r=await fetch('/ask',{method:'POST',body:fd}); const j=await r.json();
+  document.getElementById('answer').textContent=j.answer+'\n\nمنابع: '+JSON.stringify(j.sources,null,1);
+}
+(async()=>{ // restore previous book
+  if(!BID)return;
+  try{
+    const b=BOOKS; // server restarts lose memory; ignore errors
+  }catch(e){}
+})();
+</script>
+</body>
+</html>
